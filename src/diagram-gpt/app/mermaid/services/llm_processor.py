@@ -1,6 +1,9 @@
 import re
+import os
+import logging
 from langchain.schema.messages import HumanMessage, SystemMessage, AIMessage
-from langchain.chat_models import ChatOpenAI
+from langchain_openai import ChatOpenAI
+from langchain_aws import ChatBedrock
 from app.mermaid.models.mermaid_diagram_type import MermaidDiagramType
 from prompts.prompt_provider import PromptProvider
 
@@ -9,6 +12,8 @@ class LlmProcessor:
     def __init__(self, prompt_provider: PromptProvider):
         self.prompt_provider = prompt_provider
         self.regex = re.compile(r"```(?:mermaid)?(.*)```", re.DOTALL)
+        self.logger = logging.getLogger('uvicorn.error')
+        self.logger.setLevel(logging.INFO)
 
     def prompt_generate(self, diagram_type: MermaidDiagramType, text: list[str]) -> str:
         messages = self._get_generate_messages(diagram_type, text)
@@ -93,7 +98,9 @@ class LlmProcessor:
         return messages
 
     async def _agenerate(self, messages, openai_api_key):
+        self.logger.info(messages)
         response = await self._get_llm(openai_api_key).agenerate([messages])
+        self.logger.info(response)
         result = response.generations[0][0].text
         return result
 
@@ -104,8 +111,18 @@ class LlmProcessor:
 
         return result.strip()
 
-    def _get_llm(self, openai_api_key: str) -> ChatOpenAI:
-        return ChatOpenAI(temperature=0.3, openai_api_key=openai_api_key, model="gpt-4-turbo-preview")
+    def _get_llm(self, openai_api_key: str) -> ChatBedrock:
+        if openai_api_key:
+            self.logger.info("Using OpenAI service")
+            return ChatOpenAI(temperature=0.0, openai_api_key=openai_api_key, model="gpt-4o")
+        if "OPENAI_API_KEY" in os.environ:
+            self.logger.info("Using OpenAI service")
+            return ChatOpenAI(temperature=0.0, openai_api_key=os.environ.get("OPENAI_API_KEY"), model="gpt-4o")
+        self.logger.info("Using Bedrock service")
+        return ChatBedrock(
+            model_id="us.anthropic.claude-3-5-sonnet-20241022-v2:0",
+            model_kwargs=dict(temperature=0.0),
+        )
 
     def _messages_to_text(self, messages: list[HumanMessage | SystemMessage | AIMessage]) -> str:
         result = ""

@@ -4,6 +4,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from app.mermaid.api import api as mermaid_api
 from app.plant_uml.api import api as plant_uml_api
+from dotenv import load_dotenv
+
+load_dotenv()
 
 app = FastAPI(
     title="Diagrams AI",
